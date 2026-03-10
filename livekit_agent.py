@@ -18,8 +18,9 @@ from stress_trigger import check_stress
 from response_engine import generate_response
 from summary_tool import create_summary, create_handoff_summary
 from handoff import transfer_to_human
+from text_to_speech import speak
 
-# Phrases that mean the customer wants to talk to a human (not AI)
+
 WANT_HUMAN_PHRASES = [
     "talk to human", "speak to human", "talk to a human", "speak to a human",
     "want to talk to human", "need to talk to human", "i need a human",
@@ -34,15 +35,12 @@ def wants_human(text):
     lower = text.strip().lower()
     return any(p in lower for p in WANT_HUMAN_PHRASES)
 
-from text_to_speech import speak
 
-
-model = WhisperModel("base",compute_type="int8")
+model = WhisperModel("base", compute_type="int8")
 
 conversation_history = []
 
 is_speaking = False
-# Ignore mic for this many seconds after agent finishes speaking (avoids echo/noise)
 SPEECH_COOLDOWN_SEC = 1.5
 last_speech_end_time = 0.0
 
@@ -50,7 +48,6 @@ last_speech_end_time = 0.0
 async def process_audio(audio_frames):
 
     audio = np.concatenate(audio_frames)
-
     file = "temp_audio.wav"
 
     sf.write(file, audio, 48000)
@@ -87,54 +84,40 @@ async def handle_audio(track):
 
     async for frame in audio_stream:
 
-        # -----------------------------
-        # FIX 1: Ignore mic while agent speaking
-        # -----------------------------
-        if is_speaking:
+        if is_speaking or (time.monotonic() - last_speech_end_time) < SPEECH_COOLDOWN_SEC:
             frames.clear()
             speech_started = False
             silence_counter = 0
             continue
 
-        # -----------------------------
-        # Cooldown: ignore mic briefly after agent spoke (avoids echo / false triggers)
-        # -----------------------------
-        if (time.monotonic() - last_speech_end_time) < SPEECH_COOLDOWN_SEC:
-            frames.clear()
-            speech_started = False
-            silence_counter = 0
+        try:
+            raw = frame.frame.data
+        except AttributeError:
+            raw = getattr(frame, "data", None)
+
+        if raw is None:
             continue
 
-        samples = np.frombuffer(
-            frame.frame.data,
-            dtype=np.int16
-        ).astype(np.float32) / 32768.0
+        samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
 
         volume = np.abs(samples).mean()
 
-        # -----------------------------
-        # Speech detection (0.04 = less sensitive to background noise)
-        # -----------------------------
-        if volume > 0.04:
+        # Lower threshold for better speech detection
+        if volume > 0.01:
 
             speech_started = True
             silence_counter = 0
-
             frames.append(samples)
 
         elif speech_started:
 
             silence_counter += 1
 
-            # Need more silence frames before considering speech ended (reduces false triggers)
-            if silence_counter < 22:
+            if silence_counter < 20:
                 frames.append(samples)
                 continue
 
-            # -----------------------------
-            # Speech finished (ignore very short bursts)
-            # -----------------------------
-            if len(frames) < 100:
+            if len(frames) < 40:
                 frames.clear()
                 speech_started = False
                 silence_counter = 0
@@ -144,78 +127,119 @@ async def handle_audio(track):
 
                 text, audio_file = await process_audio(frames)
 
-                # -----------------------------
-                # FIX 2: Clear everything
-                # -----------------------------
                 frames.clear()
                 speech_started = False
                 silence_counter = 0
 
-                if len(text) < 5:
+                if len(text) < 3:
                     continue
 
                 print("\n👤 User said:", text)
 
                 conversation_history.append("User: " + text)
 
-                # -----------------------------
-                # Transfer to human if requested
-                # -----------------------------
                 if wants_human(text):
+
                     summary = create_handoff_summary(conversation_history)
-                    is_speaking = True
-                    hold_msg = "I'll connect you with a human agent now. Please hold."
-                    t = threading.Thread(target=speak, args=(hold_msg,), daemon=True)
-                    t.start()
-                    await asyncio.to_thread(t.join)
-                    is_speaking = False
-                    last_speech_end_time = time.monotonic()
+
+                    msg = "I'll connect you with a human agent now."
+
+                    speak(msg)
+
                     transfer_to_human(summary)
                     continue
 
-                audio_score = analyze_audio(audio_file)
-                text_score = analyze_text(text)
+                # -------------------------
+                # AUDIO SENTIMENT
+                # -------------------------
 
-                stress_level = check_stress(audio_score, text_score)
+                try:
+                    print("Running audio analysis...")
+                    audio_score = analyze_audio(audio_file)
+                except Exception as e:
+                    print("Audio analysis failed:", e)
+                    audio_score = 0.5
+
+                # -------------------------
+                # TEXT SENTIMENT
+                # -------------------------
+
+                try:
+                    print("Running text sentiment...")
+                    text_score = analyze_text(text)
+                except Exception as e:
+                    print("Text sentiment failed:", e)
+                    text_score = "neutral"
+
+                # -------------------------
+                # STRESS LEVEL
+                # -------------------------
+
+                try:
+                    stress_level = check_stress(audio_score, text_score)
+                except Exception as e:
+                    print("Stress check failed:", e)
+                    stress_level = "NORMAL"
 
                 print("📊 Stress level:", stress_level)
 
-                response = generate_response(
-                    text,
-                    stress_level,
-                    conversation_history
-                )
+                # -------------------------
+                # RESPONSE GENERATION
+                # -------------------------
+
+                try:
+
+                    response = generate_response(
+                        text,
+                        stress_level,
+                        conversation_history
+                    )
+
+                except Exception as e:
+
+                    print("LLM error:", e)
+
+                    response = "I'm here to help. Could you please explain your issue again?"
 
                 print("🤖 Agent:", response)
 
                 conversation_history.append("Agent: " + response)
 
-                # -----------------------------
-                # Speak response
-                # -----------------------------
-                is_speaking = True
+                # -------------------------
+                # SPEAK RESPONSE
+                # -------------------------
 
-                t = threading.Thread(
-                    target=speak,
-                    args=(response,),
-                    daemon=True
-                )
-                t.start()
+                try:
 
-                # -----------------------------
-                # FIX 3: wait until speaking finishes
-                # -----------------------------
-                await asyncio.to_thread(t.join)
+                    is_speaking = True
 
-                is_speaking = False
-                last_speech_end_time = time.monotonic()
+                    t = threading.Thread(
+                        target=speak,
+                        args=(response,),
+                        daemon=True
+                    )
 
-                # -----------------------------
-                # Escalation
-                # -----------------------------
+                    t.start()
+
+                    await asyncio.to_thread(t.join)
+
+                except Exception as e:
+
+                    print("TTS error:", e)
+
+                finally:
+
+                    is_speaking = False
+                    last_speech_end_time = time.monotonic()
+
+                # -------------------------
+                # ESCALATE IF HIGH STRESS
+                # -------------------------
+
                 if stress_level == "HIGH":
 
                     summary = create_summary(conversation_history)
+
                     transfer_to_human(summary)
 
             except Exception as e:
@@ -233,7 +257,12 @@ async def entrypoint(ctx):
 
     def on_track(track, publication, participant):
 
-        print("🎙 Microphone connected")
+        try:
+            pname = getattr(participant, "identity", None) or getattr(participant, "name", None) or "unknown"
+        except Exception:
+            pname = "unknown"
+
+        print(f"🎙 Audio track subscribed from: {pname}")
 
         asyncio.create_task(handle_audio(track))
 

@@ -2,6 +2,7 @@ print("Starting Banking Voice Agent...")
 
 from speech_to_text import transcribe
 from sentiment_pipeline import analyze_audio
+from text_sentiment import analyze_text
 from stress_trigger import check_stress
 from response_engine import generate_response
 
@@ -16,13 +17,17 @@ try:
     text = transcribe(audio_file)
     print("Speech to text:", text)
 
-    stress = analyze_audio(audio_file)
-    print("Stress level:", stress)
+    audio_stress = analyze_audio(audio_file)
+    print("Audio stress score:", audio_stress)
 
-    decision = check_stress(stress)
-    print("Decision:", decision)
+    text_stress = analyze_text(text)
+    print("Text stress score:", text_stress)
 
-    response = generate_response(text)
+    decision = check_stress(audio_stress, text_stress)
+    print("Stress level decision:", decision)
+
+    history = [f"User: {text}"]
+    response = generate_response(text, decision, history)
     print("AI Response:", response)
 
 except Exception as e:
