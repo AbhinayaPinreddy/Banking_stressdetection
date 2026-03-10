@@ -83,7 +83,7 @@ pip install -r requirements.txt
 In a **new terminal**, go to the project folder and run:
 
 ```bash
-python livekit_agent.py dev
+python livekit_agent.py start
 ```
 
 Wait until you see something like **"Agent starting..."** and **"Connected to room"** (after you join a room). Leave this terminal running.
