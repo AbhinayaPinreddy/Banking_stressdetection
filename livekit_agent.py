@@ -134,7 +134,7 @@ async def handle_audio(track):
                 if len(text) < 3:
                     continue
 
-                print("\n👤 User said:", text)
+                print("\n User said:", text)
 
                 conversation_history.append("User: " + text)
 
@@ -181,7 +181,7 @@ async def handle_audio(track):
                     print("Stress check failed:", e)
                     stress_level = "NORMAL"
 
-                print("📊 Stress level:", stress_level)
+                print(" Stress level:", stress_level)
 
                 # -------------------------
                 # RESPONSE GENERATION
@@ -201,7 +201,7 @@ async def handle_audio(track):
 
                     response = "I'm here to help. Could you please explain your issue again?"
 
-                print("🤖 Agent:", response)
+                print(" Agent:", response)
 
                 conversation_history.append("Agent: " + response)
 
@@ -249,11 +249,11 @@ async def handle_audio(track):
 
 async def entrypoint(ctx):
 
-    print("🚀 Agent starting...")
+    print(" Agent starting...")
 
     await ctx.connect()
 
-    print(f"✅ Connected to room: {ctx.room.name}")
+    print(f" Connected to room: {ctx.room.name}")
 
     def on_track(track, publication, participant):
 
