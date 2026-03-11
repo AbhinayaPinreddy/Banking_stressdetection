@@ -74,7 +74,7 @@ async def handle_audio(track):
     if track.kind != rtc.TrackKind.KIND_AUDIO:
         return
 
-    print("🎤 Listening...")
+    print(" Listening...")
 
     audio_stream = rtc.AudioStream(track)
 
