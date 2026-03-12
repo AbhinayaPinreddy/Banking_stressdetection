@@ -143,7 +143,7 @@ Copy the **entire token** (long JWT string) that is printed.
 - **`text_sentiment.py`** – Text-based sentiment analysis  
 - **`sentiment_pipeline.py`** – Audio-based analysis (e.g. stress from voice)  
 - **`stress_trigger.py`** – Combines signals to decide when to treat the user as stressed  
-- **`text_to_speech.py`** – Converts agent replies to speech  
+- **`text_to_speech.py`** – Converts agent replies to speech (This project uses 'sapi5' for Windows and 'espeak' for Linux/Raspberry Pi when initializing pyttsx3 for text-to-speech.)
 - **`handoff.py`** – Handoff to human when requested  
 
 ---
