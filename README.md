@@ -161,3 +161,7 @@ Copy the **entire token** (long JWT string) that is printed.
 
 - **Docker not found**  
   Install Docker Desktop and ensure the Docker daemon is running before running the `docker run` command.
+
+This project was created in collaboration with [Superteams.ai](https://superteams.ai).
+
+The collaboration involved contributing technical content, sharing insights, and building projects/blogs focused on learning, innovation, and community engagement in the tech ecosystem.
